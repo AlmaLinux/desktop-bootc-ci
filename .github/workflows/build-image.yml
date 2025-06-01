@@ -184,7 +184,6 @@ jobs:
       - name: Login to Container Registry
         run: |
           echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
-          echo ${{ secrets.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
 
       - name: Maximize build space
         if: ${{ matrix.platform != 'arm64' && inputs.skip-maximize-build-space != true }}
@@ -381,20 +380,26 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           PLATFORM: ${{ matrix.platform }}
-          DIGEST: ${{ steps.push.outputs.digest }}
-          VERSION_ID: ${{ steps.load.outputs.version-id }}
         run: |
-          mkdir -p /tmp/outputs/digests
-          echo "${DIGEST}" > /tmp/outputs/digests/${IMAGE_NAME}-${PLATFORM}.txt
+          mkdir -p /tmp/outputs/digests/
+          jq -n --arg platform "${PLATFORM}" \
+            --arg digest "${{ steps.push.outputs.digest }}" \
+            --arg redhat-version-id "${{ steps.load.outputs.redhat-version-id }}" \
+            --arg version "${{ steps.load.outputs.version }}" \
+            --arg image_id "${{ steps.load.outputs.image-id }}" \
+            '{($platform): {digest: $digest, version: $version, redhat-version-id: $redhat-version-id, image_id: $image_id}}' \
+            > /tmp/outputs/digests/${IMAGE_NAME}_${PLATFORM}.json
+
+          cat /tmp/outputs/digests/${IMAGE_NAME}_${PLATFORM}.json
 
       - name: Upload Output Artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ env.IMAGE_NAME }}-${{ matrix.platform }}
+          name: ${{ env.IMAGE_NAME }}_${{ matrix.platform }}
           retention-days: 1
           if-no-files-found: error
           path: |
-            /tmp/outputs/digests/*.txt
+            /tmp/outputs/digests/*.json
 
   manifest:
     name: Create Manifest
@@ -403,9 +408,6 @@ jobs:
     needs:
       - generate_matrix
       - build_push
-    container:
-      image:  cgr.dev/chainguard/wolfi-base:latest@sha256:4c4a48b87480f65c9600eeda9afc783a54def1d936edde52d1bca11bda885d37
-      options: --privileged --security-opt seccomp=unconfined
     permissions:
       contents: read
       packages: write
@@ -414,24 +416,8 @@ jobs:
       image: ${{ steps.push_manifest.outputs.image }}
       digest: ${{ steps.push_manifest.outputs.digest }}
       image-id: ${{ steps.push_manifest.outputs.image-id }}
-      signing-enabled: ${{ env.SIGNING_ENABLED}}
+      signing-enabled: ${{ env.SIGNING_ENABLED }}
     steps:
-      - name: Install dependencies
-        run: |
-          apk add \
-            jq \
-            git \
-            podman \
-            uutils \
-            bash \
-            conmon \
-            crun \
-            netavark \
-            fuse-overlayfs
-          ln -sf /bin/bash /bin/sh
-          mkdir -p /etc/containers
-          echo '{"default":[{"type":"insecureAcceptAnything"}]}' | jq . > /etc/containers/policy.json
-
       - name: Exit on failure
         env:
           JOBS: ${{ toJson(needs) }}
@@ -447,13 +433,55 @@ jobs:
             fi
           done
 
-      - name: Get current date
-        id: date
+      - name: Login to Container Registry
+        run: echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
+
+      - name: Get a newer podman (from debian testing)
         run: |
-          # Should generate a timestamp like what is defined on the ArtifactHub documentation
-          # E.G: 2022-02-08T15:38:15Z'
-          # https://artifacthub.io/docs/topics/repositories/container-images/
-          # https://linux.die.net/man/1/date
+          set -eux
+          echo 'deb [trusted=yes] https://ftp.debian.org/debian/ testing main' | sudo tee /etc/apt/sources.list.d/testing.list
+          sudo apt update
+          sudo apt install -y crun/testing podman/testing
+
+      - name: Fetch Build Outputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ${{ env.IMAGE_NAME }}_*
+          merge-multiple: true
+          path: /tmp/artifacts
+
+      - name: Load Outputs
+        id: load-outputs
+        run: |
+          ls -lR /tmp/artifacts/
+          jq -sc add /tmp/artifacts/*.json > merged.json
+          echo "DIGESTS_JSON=$(cat merged.json)" >> $GITHUB_OUTPUT
+          jq '.' merged.json
+
+      - name: Sanity check
+        id: check
+        env:
+          DIGESTS_JSON: ${{ steps.load-outputs.outputs.DIGESTS_JSON }}
+        run: |
+          # Ensure we have the digests we expected
+          platforms=()
+          IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
+
+          if [[ $(echo ${DIGESTS_JSON} | jq 'length') -eq ${#platforms[@]} ]]; then
+            echo "Expected ${#platforms[@]} digests, found $(echo ${DIGESTS_JSON} | jq 'length')"
+            exit 1
+          fi
+
+          # Ensure all versions match
+          COUNT=$(echo ${DIGESTS_JSON} | jq '[.[] | .version] | unique | length')
+          if [[ $COUNT -ne 1 ]]; then
+            echo "Versions do not match across all platforms"
+            echo ${DIGESTS_JSON} | jq '[.[] | .version]'
+            exit 1
+          fi
+
+          echo "version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .version] | unique | .[0]')" >> $GITHUB_OUTPUT
+          echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat-version-id] | unique | .[0]')" >> $GITHUB_OUTPUT
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
 
       - name: Image Metadata
@@ -466,39 +494,17 @@ jobs:
             type=ref,event=pr
           labels: |
             containers.bootc=1
-            org.opencontainers.image.created=${{ steps.date.outputs.date }}
+            redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
+            version=${{ steps.check.outputs.redhat-version-id }}
+            release=${{ steps.check.outputs.redhat-version-id }}
+            org.opencontainers.image.version=${{ steps.check.outputs.version }}
+            org.opencontainers.image.created=${{ steps.check.outputs.date }}
             org.opencontainers.image.description=${{ inputs.image-description }}
             org.opencontainers.image.documentation=${{ inputs.docs-url }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
-
-      - name: Fetch Build Outputs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: ${{ env.IMAGE_NAME }}-*
-          merge-multiple: true
-          path: /tmp/artifacts
-
-      - name: Load Outputs
-        id: load-outputs
-        run: |
-          DIGESTS_JSON=$(jq -n '{}')
-          ls -lR /tmp/artifacts/
-          for digest_file in /tmp/artifacts/*.txt; do
-            cat $digest_file
-            # Extract the platform from the file name
-            PLATFORM=$(basename $digest_file | rev | cut -d'-' -f1 | rev | cut -d'.' -f1)
-            DIGEST=$(cat $digest_file)
-            # Add the platform and digest to the JSON object
-            DIGESTS_JSON=$(echo "$DIGESTS_JSON" | jq --arg key "$PLATFORM" --arg value "$DIGEST" '. + {($key): $value}')
-          done
-          echo "DIGESTS_JSON=$(echo $DIGESTS_JSON | jq -c '.')" >> $GITHUB_OUTPUT
-          echo $DIGESTS_JSON | jq -c '.'
-
-      - name: Login to Container Registry
-        run: echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
 
       - name: Create Manifest
         id: create-manifest
@@ -517,12 +523,9 @@ jobs:
           IMAGE_REF: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_PATH }}/${{ env.IMAGE_NAME }}
         run: |
           lowercase_ref=$(echo "${{ env.IMAGE_REF }}" | tr '[:upper:]' '[:lower:]')
-          DIGESTS=$(echo "$DIGESTS_JSON" | jq -c '.')
-          # turn the comma separated string into a list
-          platforms=()
-          IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
-          for platform in ${platforms[@]}; do
-            digest=$(echo $DIGESTS | jq -r ".$platform")
+
+          for platform in $(echo $DIGESTS_JSON | jq -r '. | to_entries | .[].key'); do
+            digest=$(echo $DIGESTS_JSON | jq -r ".$platform.digest")
             echo "Adding ${lowercase_ref}@$digest for $platform"
             podman manifest add $MANIFEST ${lowercase_ref}@$digest --arch $platform
           done
@@ -555,29 +558,15 @@ jobs:
           echo "Pushed manifest to $lowercase_ref with digest $DIGEST"
           echo $INSPECT | jq .
 
-  # Cosign throws errors when ran inside the Fedora container for one reason or another
-  # so we move this to another step in order to run on Ubuntu
-  sign:
-    needs: manifest
-    if: ${{ github.event_name != 'pull_request' && needs.manifest.outputs.signing-enabled == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    steps:
-      - name: Login to Container Registry
-        run: |
-          echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
-          echo ${{ secrets.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
-
       - name: Install Cosign
+        if: ${{ github.event_name != 'pull_request' && env.SIGNING_ENABLED == 'true' }}
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
 
       - name: Sign Manifest
+        if: ${{ github.event_name != 'pull_request' && env.SIGNING_ENABLED == 'true' }}
         env:
-          DIGEST: ${{ needs.manifest.outputs.digest }}
-          IMAGE: ${{ needs.manifest.outputs.image }}
+          DIGEST: ${{ steps.push_manifest.outputs.digest }}
+          IMAGE: ${{ steps.push_manifest.outputs.image }}
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
