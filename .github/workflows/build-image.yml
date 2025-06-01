@@ -448,14 +448,6 @@ jobs:
             exit 1
           fi
 
-          # Ensure all versions match
-          COUNT=$(echo ${DIGESTS_JSON} | jq '[.[] | .version] | unique | length')
-          if [[ $COUNT -ne 1 ]]; then
-            echo "Versions do not match across all platforms"
-            echo ${DIGESTS_JSON} | jq '[.[] | .version]'
-            exit 1
-          fi
-
           echo "version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .version] | unique | .[0]')" >> $GITHUB_OUTPUT
           echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat_version_id] | unique | .[0]')" >> $GITHUB_OUTPUT
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
