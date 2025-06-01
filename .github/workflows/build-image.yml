@@ -384,10 +384,10 @@ jobs:
           mkdir -p /tmp/outputs/digests/
           jq -n --arg platform "${PLATFORM}" \
             --arg digest "${{ steps.push.outputs.digest }}" \
-            --arg redhat-version-id "${{ steps.load.outputs.redhat-version-id }}" \
+            --arg redhat_version_id "${{ steps.load.outputs.redhat-version-id }}" \
             --arg version "${{ steps.load.outputs.version }}" \
             --arg image_id "${{ steps.load.outputs.image-id }}" \
-            '{($platform): {digest: $digest, version: $version, redhat-version-id: $redhat-version-id, image_id: $image_id}}' \
+            '{($platform): {digest: $digest, version: $version, redhat_version_id: $redhat_version_id, image_id: $image_id}}' \
             > /tmp/outputs/digests/${IMAGE_NAME}_${PLATFORM}.json
 
           cat /tmp/outputs/digests/${IMAGE_NAME}_${PLATFORM}.json
@@ -481,7 +481,7 @@ jobs:
           fi
 
           echo "version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .version] | unique | .[0]')" >> $GITHUB_OUTPUT
-          echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat-version-id] | unique | .[0]')" >> $GITHUB_OUTPUT
+          echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat_version_id] | unique | .[0]')" >> $GITHUB_OUTPUT
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
 
       - name: Image Metadata
