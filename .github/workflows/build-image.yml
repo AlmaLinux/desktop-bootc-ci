@@ -396,7 +396,6 @@ jobs:
   manifest:
     name: Create Manifest
     runs-on: ubuntu-latest
-    if: always()
     needs:
       - generate_matrix
       - build_push
@@ -410,21 +409,6 @@ jobs:
       image-id: ${{ steps.push_manifest.outputs.image-id }}
       signing-enabled: ${{ env.SIGNING_ENABLED }}
     steps:
-      - name: Exit on failure
-        env:
-          JOBS: ${{ toJson(needs) }}
-        run: |
-          echo "Job status:"
-          echo $JOBS | jq -r 'to_entries[] | " - \(.key): \(.value.result)"'
-
-          for i in $(echo $JOBS | jq -r 'to_entries[] | .value.result'); do
-            if [ "$i" != "success" ] && [ "$i" != "skipped" ]; then
-              echo ""
-              echo "Status check not okay!"
-              exit 1
-            fi
-          done
-
       - name: Login to Container Registry
         run: echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
 
@@ -459,7 +443,7 @@ jobs:
           platforms=()
           IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
 
-          if [[ $(echo ${DIGESTS_JSON} | jq 'length') -eq ${#platforms[@]} ]]; then
+          if [[ $(echo ${DIGESTS_JSON} | jq 'length') -ne ${#platforms[@]} ]]; then
             echo "Expected ${#platforms[@]} digests, found $(echo ${DIGESTS_JSON} | jq 'length')"
             exit 1
           fi
