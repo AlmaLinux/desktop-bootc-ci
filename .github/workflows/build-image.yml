@@ -272,6 +272,13 @@ jobs:
           labels: |
             redhat.id=${{ steps.check.outputs.redhat-id }}
             redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
+            org.opencontainers.image.created=${{ steps.build.outputs.date }}
+            org.opencontainers.image.description=${{ inputs.image-description }}
+            org.opencontainers.image.documentation=${{ inputs.docs-url }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
           changelog: |
             ## Changelog ${{ inputs.image-name }} <pretty> ${{ matrix.platform }}
             ### Version: <version>
@@ -316,21 +323,6 @@ jobs:
           echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
           echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
           echo $INSPECT | jq .
-
-      - name: Image Metadata
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
-        id: metadata
-        with:
-          images: ${{ steps.load.outputs.image-id }}
-          labels: |
-            containers.bootc=1
-            org.opencontainers.image.created=${{ steps.build.outputs.date }}
-            org.opencontainers.image.description=${{ inputs.image-description }}
-            org.opencontainers.image.documentation=${{ inputs.docs-url }}
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
-            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       # Push the image to GHCR (Image Registry)
       - name: Push to registry
