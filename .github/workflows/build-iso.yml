@@ -194,7 +194,7 @@ jobs:
           IMAGE_NAME: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live.iso
         run: |-
           # Upload the files to S3 bucket
-          aws s3 cp ${{ steps.rename.outputs.output_directory }}/* \
+          aws s3 cp ${{ steps.rename.outputs.output_directory }} \
               s3://${{ secrets.BUCKET }}/${{ inputs.image-name }}/ \
               --recursive
 
