@@ -195,22 +195,23 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ inputs.aws-default-region }}
+          BUCKET: ${{ inputs.bucket }}
         run: |-
           # Upload the files to S3 bucket
           aws s3 cp ${{ steps.rename.outputs.output_directory }} \
-              s3://${{ inputs.bucket }}/${{ inputs.image-name }}/ \
+              s3://${BUCKET}/${{ inputs.image-name }}/ \
               --recursive
 
            # Make them uploaded file publicly available
           aws s3api put-object-tagging \
-              --bucket ${{ inputs.bucket }} \
+              --bucket ${BUCKET} \
               --key ${{ inputs.image-name }}/${IMAGE_NAME} \
               --tagging 'TagSet={Key=public,Value=yes}'
 
           aws s3api put-object-tagging \
-              --bucket ${{ inputs.bucket }} \
+              --bucket ${BUCKET} \
               --key ${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM \
               --tagging 'TagSet={Key=public,Value=yes}'
 
-          echo "Artifact URL: https://${{ inputs.bucket }}.s3.${{ inputs.aws-default-region }}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
-          echo "Digest: https://${{ inputs.bucket }}.s3.${{ inputs.aws-default-region }}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM" >> $GITHUB_STEP_SUMMARY
+          echo "ISO: https://${BUCKET}.s3.${AWS_DEFAULT_REGION}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "Digest: https://${BUCKET}.s3.${AWS_DEFAULT_REGION}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM" >> $GITHUB_STEP_SUMMARY
