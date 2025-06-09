@@ -193,16 +193,18 @@ jobs:
         env:
           IMAGE_NAME: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live.iso
         run: |-
-          aws s3 cp ${{ steps.rename.outputs.output_directory }}/* \ # Upload the file to S3 bucket
+          # Upload the files to S3 bucket
+          aws s3 cp ${{ steps.rename.outputs.output_directory }}/* \
               s3://${{ secrets.BUCKET }}/${{ inputs.image-name }}/ \
               --recursive
 
-          aws s3api put-object-tagging \ # Make uploaded file publicly available
+           # Make them uploaded file publicly available
+          aws s3api put-object-tagging \
               --bucket ${{ secrets.BUCKET }} \
               --key ${{ inputs.image-name }}/${IMAGE_NAME} \
               --tagging 'TagSet={Key=public,Value=yes}'
 
-          aws s3api put-object-tagging \ # Make uploaded file publicly available
+          aws s3api put-object-tagging \
               --bucket ${{ secrets.BUCKET }} \
               --key ${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM \
               --tagging 'TagSet={Key=public,Value=yes}'
