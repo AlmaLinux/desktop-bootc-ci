@@ -48,6 +48,16 @@ on:
         required: false
         type: boolean
         default: false
+      upload-to-s3:
+        description: "Upload the ISO to S3"
+        required: false
+        type: boolean
+        default: false
+      aws-default-region:
+        description: "The AWS region to use for S3 uploads"
+        required: false
+        type: string
+        default: "us-east-1"
     secrets:
       REGISTRY_TOKEN:
         description: "The token to use for the registry"
@@ -55,14 +65,14 @@ on:
       R2_ACCOUNT_ID:
         description: "Cloudflare R2 account ID"
         required: false
-      R2_ACCESS_KEY_ID:
-        description: "Cloudflare R2 access key ID"
+      ACCESS_KEY_ID:
+        description: "S3/R2 access key ID"
         required: false
-      R2_SECRET_ACCESS_KEY:
-        description: "Cloudflare R2 secret access key"
+      SECRET_ACCESS_KEY:
+        description: "S3/R2 secret access key"
         required: false
-      R2_BUCKET:
-        description: "Cloudflare R2 bucket name"
+      BUCKET:
+        description: "S3/R2 bucket name"
         required: false
 
 jobs:
@@ -166,8 +176,28 @@ jobs:
         uses: ryand56/r2-upload-action@3bee737337fc7ecb450bedfff45cfa2ed953e576 # v1.4
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
-          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          r2-bucket: ${{ secrets.R2_BUCKET }}
+          r2-access-key-id: ${{ secrets.ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.BUCKET }}
           source-dir: ${{ steps.rename.outputs.output_directory }}
           destination-dir: ./
+
+      - name: Upload to S3
+        if: inputs.upload-to-s3 == true
+        id: upload-s3
+        env:
+          IMAGE_NAME: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live.iso
+        run: |-
+          aws s3 cp ${{ steps.rename.outputs.output_directory }}/* \ # Upload the file to S3 bucket
+              s3://${{ secrets.BUCKET }}/${{ inputs.image-name }}/ \
+              --recursive
+
+          aws s3api put-object-tagging \ # Make uploaded file publicly available
+              --bucket ${{ secrets.BUCKET }} \
+              --key ${{ inputs.image-name }}/${IMAGE_NAME} \
+              --tagging 'TagSet={Key=public,Value=yes}'
+
+          aws s3api put-object-tagging \ # Make uploaded file publicly available
+              --bucket ${{ secrets.BUCKET }} \
+              --key ${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM \
+              --tagging 'TagSet={Key=public,Value=yes}'
