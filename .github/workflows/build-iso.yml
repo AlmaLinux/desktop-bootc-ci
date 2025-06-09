@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: "ghcr.io"
+      upload-to-cloudflare:
+        description: "Upload the ISO to Cloudflare"
+        required: false
+        type: boolean
+        default: false
     secrets:
       REGISTRY_TOKEN:
         description: "The token to use for the registry"
@@ -126,7 +131,8 @@ jobs:
           echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
 
       - name: Upload ISOs and Checksum to Job Artifacts
-        id: upload
+        if: inputs.upload-to-cloudflare == false
+        id: upload-gh
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live
@@ -137,6 +143,23 @@ jobs:
           retention-days: 7
 
       - name: Summary
+        if: inputs.upload-to-cloudflare == false
         run: |
-          echo "Artifact URL: ${{ steps.upload.outputs.artifact-url }}" >> $GITHUB_STEP_SUMMARY
-          echo "Digest: ${{ steps.upload.outputs.artifact-digest }}" >> $GITHUB_STEP_SUMMARY
+          echo "Artifact URL: ${{ steps.upload-gh.outputs.artifact-url }}" >> $GITHUB_STEP_SUMMARY
+          echo "Digest: ${{ steps.upload-gh.outputs.artifact-digest }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload to Cloudflare
+        if: inputs.upload-to-cloudflare == true
+        id: upload-cf
+        uses: ryand56/r2-upload-action@3bee737337fc7ecb450bedfff45cfa2ed953e576 # v1.4
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.R2_BUCKET }}
+          source-dir: ${{ steps.rename.outputs.output_directory }}
+
+      - name: Summary
+        if: inputs.upload-to-cloudflare == true
+        run: |
+          echo "Artifact URL: ${{ steps.upload-cf.outputs.file-urls }}" >> $GITHUB_STEP_SUMMARY
