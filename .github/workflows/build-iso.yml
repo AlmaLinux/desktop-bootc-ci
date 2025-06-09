@@ -170,6 +170,7 @@ jobs:
           r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           r2-bucket: ${{ secrets.R2_BUCKET }}
           source-dir: ${{ steps.rename.outputs.output_directory }}
+          destination-dir: /
 
       - name: Summary
         if: inputs.upload-to-cloudflare == true
