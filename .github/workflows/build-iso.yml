@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: "ghcr.io"
+      upload-to-github:
+        description: "Upload the ISO to GitHub Actions artifacts"
+        required: false
+        type: boolean
+        default: true
       upload-to-cloudflare:
         description: "Upload the ISO to Cloudflare"
         required: false
@@ -153,7 +158,7 @@ jobs:
           echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
 
       - name: Upload ISOs and Checksum to Job Artifacts
-        if: inputs.upload-to-cloudflare == false
+        if: inputs.upload-to-github == true
         id: upload-gh
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -165,7 +170,7 @@ jobs:
           retention-days: 7
 
       - name: Summary
-        if: inputs.upload-to-cloudflare == false
+        if: inputs.upload-to-github == true
         run: |
           echo "Artifact URL: ${{ steps.upload-gh.outputs.artifact-url }}" >> $GITHUB_STEP_SUMMARY
           echo "Digest: ${{ steps.upload-gh.outputs.artifact-digest }}" >> $GITHUB_STEP_SUMMARY
