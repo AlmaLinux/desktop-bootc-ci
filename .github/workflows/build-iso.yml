@@ -171,8 +171,3 @@ jobs:
           r2-bucket: ${{ secrets.R2_BUCKET }}
           source-dir: ${{ steps.rename.outputs.output_directory }}
           destination-dir: /
-
-      - name: Summary
-        if: inputs.upload-to-cloudflare == true
-        run: |
-          echo "Artifact URL: ${{ steps.upload-cf.outputs.file-urls }}" >> $GITHUB_STEP_SUMMARY
