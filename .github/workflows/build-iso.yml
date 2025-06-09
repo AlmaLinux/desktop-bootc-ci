@@ -52,6 +52,18 @@ on:
       REGISTRY_TOKEN:
         description: "The token to use for the registry"
         required: true
+      R2_ACCOUNT_ID:
+        description: "Cloudflare R2 account ID"
+        required: false
+      R2_ACCESS_KEY_ID:
+        description: "Cloudflare R2 access key ID"
+        required: false
+      R2_SECRET_ACCESS_KEY:
+        description: "Cloudflare R2 secret access key"
+        required: false
+      R2_BUCKET:
+        description: "Cloudflare R2 bucket name"
+        required: false
 
 jobs:
   generate_matrix:
