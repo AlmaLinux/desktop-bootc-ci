@@ -213,5 +213,5 @@ jobs:
               --key ${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM \
               --tagging 'TagSet={Key=public,Value=yes}'
 
-          echo "ISO: https://${BUCKET}.s3.${AWS_DEFAULT_REGION}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
-          echo "Digest: https://${BUCKET}.s3.${AWS_DEFAULT_REGION}.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM" >> $GITHUB_STEP_SUMMARY
+          echo "ISO: https://${BUCKET}.s3-accelerate.dualstack.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "Digest: https://${BUCKET}.s3-accelerate.dualstack.amazonaws.com/${{ inputs.image-name }}/${IMAGE_NAME}-CHECKSUM" >> $GITHUB_STEP_SUMMARY
