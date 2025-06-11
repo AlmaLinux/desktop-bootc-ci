@@ -121,7 +121,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: AlmaLinux/atomic-ci/.github/actions/prepare-build
+      - uses: wei18/local-composite-action@v1
+        with:
+          action_repository: 'AlmaLinux/atomic-ci'
+
+      - uses: ./../AlmaLinux/atomic-ci/.github/actions/prepare-build
         id: set-matrix
         with:
           platforms: ${{ inputs.platforms }}
@@ -152,7 +156,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: AlmaLinux/atomic-ci/.github/actions/build
+      - uses: ./../AlmaLinux/atomic-ci/.github/actions/build
         id: initial-build
         with:
           platforms: ${{ matrix.platform }}
