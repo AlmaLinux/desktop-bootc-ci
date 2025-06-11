@@ -11,13 +11,13 @@ inputs:
   containerfile:
     description: The path to the Containerfile used for building the image
     required: true
-  image_name:
+  image-name:
     description: The name of the image to build
     required: true
-  image_path:
+  image-path:
     description: The path where the image will be stored in the registry
     required: true
-  image_tag:
+  image-tag:
     description: The tag for the image
     required: true
   skip_maximize_build_space:
@@ -76,7 +76,7 @@ runs:
       id: build
       shell: bash
       env:
-        IMAGE_TAG: ${{ inputs.image_tag }}-${{ env.CLEAN_ARCH }}
+        IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
       run: |
         sudo podman build \
           --platform=linux/${{ inputs.platform }} \
@@ -85,10 +85,10 @@ runs:
           --device /dev/fuse \
           --timestamp=0 \
           --iidfile /tmp/image-id \
-          --build-arg IMAGE_NAME=${{ inputs.image_name }} \
-          --build-arg IMAGE_REGISTRY=${{ inputs.REGISTRY }}/${{ inputs.image_path }} \
+          --build-arg IMAGE_NAME=${{ inputs.image-name }} \
+          --build-arg IMAGE_REGISTRY=${{ inputs.REGISTRY }}/${{ inputs.image-path }} \
           --build-arg VARIANT=${{ inputs.variant }} \
-          -t ${{ inputs.image_name }}:${IMAGE_TAG} \
+          -t ${{ inputs.image-name }}:${IMAGE_TAG} \
           -f ${{ inputs.containerfile }} \
           .
 

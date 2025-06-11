@@ -1,0 +1,186 @@
+---
+name: Rechunk image
+
+inputs:
+  image-id:
+    description: The ID of the image to rechunk
+    required: true
+  previous-image:
+    description: The previous image to compare against
+    required: true
+  version:
+    description: The version of the image being built
+    required: true
+  redhat-id:
+    description: The Red Hat ID for the image
+    required: true
+  redhat-version-id:
+    description: The Red Hat version ID for the image
+    required: true
+  date:
+    description: The date when the image was built (in ISO 8601 format)
+    required: true
+  image-tag:
+    description: The tag for the image being built
+    required: true
+  image-name:
+    description: The name of the image being built
+    required: true
+  image-path:
+    description: The path in the registry where the image will be stored
+    required: true
+  image-description:
+    description: A description of the image
+    required: true
+  containerfile:
+    description: The path to the Containerfile used for building the image
+    required: true
+  docs-url:
+    description: The URL to the documentation for the image
+    required: true
+  platform:
+    description: The platform for which the image is being built (e.g., "x86_64", "arm64")
+    required: true
+  changelog-snippet:
+    description: A snippet to include in the changelog
+    required: true
+  REGISTRY:
+    description: The container registry URL (e.g., "registry.example.com")
+    required: true
+
+outputs:
+  image-ref:
+    description: The reference to the pushed image in the registry
+    value: ${{ steps.push.outputs.image-ref }}
+  digest:
+    description: The digest of the pushed image
+    value: ${{ steps.push.outputs.digest }}
+  redhat-id:
+    description: The Red Hat ID from the image labels
+    value: ${{ steps.load.outputs.redhat-id }}
+  redhat-version-id:
+    description: The Red Hat version ID from the image labels
+    value: ${{ steps.load.outputs.redhat-version-id }}
+  version:
+    description: The version of the image
+    value: ${{ steps.load.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Lowercase previous image
+      id: lowercase
+      shell: bash
+      run: |
+        echo "PREVIOUS_IMAGE=`echo ${{ inputs.previous-image }} | tr '[:upper:]' '[:lower:]'`" >>${GITHUB_ENV}
+        ARCH=${{ inputs.platform }}
+        echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
+
+    - name: Run Rechunker
+      id: rechunk
+      uses: hhd-dev/rechunk@ca77507401f8700bb0b25ebecbbf980a078cd180 # v1.2.2
+      with:
+        rechunk: "ghcr.io/hhd-dev/rechunk:v1.2.1"
+        ref: ${{ inputs.image-id }}
+        prev-ref: ${{ env.PREVIOUS_IMAGE }}
+        skip_compression: true
+        version: ${{ inputs.version }}
+        pretty: ${{ inputs.redhat-version-id }}
+        revision: ${{ github.sha }}
+        labels: |
+          redhat.id=${{ inputs.redhat-id }}
+          redhat.version-id=${{ inputs.redhat-version-id }}
+          org.opencontainers.image.created=${{ inputs.date }}
+          org.opencontainers.image.description=${{ inputs.image-description }}
+          org.opencontainers.image.documentation=${{ inputs.docs-url }}
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
+          org.opencontainers.image.title=${{ inputs.image-name }}
+          org.opencontainers.image.url=${{ github.event.repository.html_url }}
+          org.opencontainers.image.vendor=${{ github.repository_owner }}
+        changelog: |
+          ## Changelog ${{ inputs.image-name }} <pretty> ${{ inputs.platform }}
+          ### Version: <version>
+          ${{ inputs.changelog-snippet }}
+
+          ### Changes since last version (<previous>):
+          #### Commits
+          <commits>
+          #### Package Changes
+          <pkgupd>
+
+    - name: Upload ChangeLog
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: changelog-${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}
+        retention-days: 1
+        if-no-files-found: error
+        path: |
+          ${{ steps.rechunk.outputs.changelog }}
+
+    - name: Load Image
+      id: load
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
+      shell: bash
+      run: |
+        ls -l ${{ steps.rechunk.outputs.changelog }}
+        cat ${{ steps.rechunk.outputs.changelog }}
+        if [ -s ${{ steps.rechunk.outputs.changelog }} ]; then
+          cat ${{ steps.rechunk.outputs.changelog }} >> $GITHUB_STEP_SUMMARY
+        fi
+
+        IMAGE=$(podman pull ${{ steps.rechunk.outputs.ref }})
+        sudo rm -rf ${{ steps.rechunk.outputs.location }}
+        podman image tag $IMAGE ${{ inputs.image-name }}:${{ env.IMAGE_TAG }}
+
+        IMAGE=${{ inputs.image-name }}:${{ env.IMAGE_TAG }}
+        INSPECT=$(podman image inspect $IMAGE)
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+        echo "digest=$(echo "$INSPECT" | jq -r '.[0].Digest')" >> $GITHUB_OUTPUT
+        echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
+        echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
+        echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
+        echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
+        echo $INSPECT | jq .
+
+    # Push the image to GHCR (Image Registry)
+    - name: Push to registry
+      id: push
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
+      shell: bash
+      run: |
+        set -x
+        lowercase_ref=$(echo "${{ inputs.REGISTRY }}/${{ inputs.image-path }}/${{ inputs.image-name }}:${{ env.IMAGE_TAG }}" | tr '[:upper:]' '[:lower:]')
+        podman tag ${{ steps.load.outputs.image-id }} ${lowercase_ref}
+        for i in {1..3}; do
+          podman push --digestfile=/tmp/digestfile ${lowercase_ref} && break || sleep $((5 * i));
+        done
+        [ -f /tmp/digestfile ] || exit 1
+        REMOTE_IMAGE_DIGEST=$(cat /tmp/digestfile)
+        echo "digest=$REMOTE_IMAGE_DIGEST" >> $GITHUB_OUTPUT
+        echo "image-ref=${lowercase_ref}" >> $GITHUB_OUTPUT
+        cat /tmp/digestfile
+
+    - name: Create Job Outputs
+      shell: bash
+      run: |
+        mkdir -p /tmp/outputs/digests/
+        jq -n --arg platform "${{ inputs.platform }}" \
+          --arg digest "${{ steps.push.outputs.digest }}" \
+          --arg redhat_version_id "${{ steps.load.outputs.redhat-version-id }}" \
+          --arg version "${{ steps.load.outputs.version }}" \
+          --arg image_id "${{ steps.load.outputs.image-id }}" \
+          '{($platform): {digest: $digest, version: $version, redhat_version_id: $redhat_version_id, image_id: $image_id}}' \
+          > /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json
+
+        cat /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json
+
+    - name: Upload Output Artifacts
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}
+        retention-days: 1
+        if-no-files-found: error
+        path: |
+          /tmp/outputs/digests/*.json

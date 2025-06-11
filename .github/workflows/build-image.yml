@@ -174,9 +174,9 @@ jobs:
           platform: ${{ matrix.platform }}
           variant: ${{ inputs.variant }}
           containerfile: ${{ inputs.containerfile }}
-          image_name: ${{ inputs.image-name }}
-          image_path: ${{ inputs.image-path }}
-          image_tag: ${{ needs.generate_matrix.outputs.tag }}
+          image-name: ${{ inputs.image-name }}
+          image-path: ${{ inputs.image-path }}
+          image-tag: ${{ needs.generate_matrix.outputs.tag }}
           skip_maximize_build_space: ${{ inputs.skip-maximize-build-space }}
           REGISTRY: ${{ inputs.REGISTRY }}
           REGISTRY_USER: ${{ inputs.REGISTRY_USER }}
@@ -201,95 +201,18 @@ jobs:
           sudo $SYFT_CMD ${IMAGE_ID} -o spdx-json=${OUTPUT_PATH}
           echo "OUTPUT_PATH=${OUTPUT_PATH}" >> $GITHUB_OUTPUT
 
-      - name: Lowercase previous image
-        id: lowercase
-        run: |
-          echo "PREVIOUS_IMAGE=`echo ${{ inputs.previous-image }} | tr '[:upper:]' '[:lower:]'`" >>${GITHUB_ENV}
-
-      - name: Run Rechunker
-        id: rechunk
-        uses: hhd-dev/rechunk@ca77507401f8700bb0b25ebecbbf980a078cd180 # v1.2.2
+      - uses: ./github-actions/.github/actions/rechunker
+        name: Rechunk and push image
+        id: rechunker
         with:
-          rechunk: "ghcr.io/hhd-dev/rechunk:v1.2.1"
-          ref: ${{ steps.build.outputs.image-id }}
-          prev-ref: ${{ env.PREVIOUS_IMAGE }}
-          skip_compression: true
-          version: ${{ steps.check.outputs.version }}
-          pretty: ${{ steps.check.outputs.redhat-version-id }}
-          revision: ${{ github.sha }}
-          labels: |
-            redhat.id=${{ steps.check.outputs.redhat-id }}
-            redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
-            org.opencontainers.image.created=${{ steps.build.outputs.date }}
-            org.opencontainers.image.description=${{ inputs.image-description }}
-            org.opencontainers.image.documentation=${{ inputs.docs-url }}
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
-            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.vendor=${{ github.repository_owner }}
-          changelog: |
-            ## Changelog ${{ inputs.image-name }} <pretty> ${{ matrix.platform }}
-            ### Version: <version>
-            ${{ inputs.changelog-snippet }}
-
-            ### Changes since last version (<previous>):
-            #### Commits
-            <commits>
-            #### Package Changes
-            <pkgupd>
-
-      - name: Upload ChangeLog
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: changelog-${{ env.IMAGE_NAME }}-${{ env.CLEAN_ARCH }}
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            ${{ steps.rechunk.outputs.changelog }}
-
-      - name: Load Image
-        id: load
-        env:
-          IMAGE_TAG: ${{ needs.generate_matrix.outputs.tag }}-${{ env.CLEAN_ARCH }}
-        run: |
-          ls -l ${{ steps.rechunk.outputs.changelog }}
-          cat ${{ steps.rechunk.outputs.changelog }}
-          if [ -s ${{ steps.rechunk.outputs.changelog }} ]; then
-            cat ${{ steps.rechunk.outputs.changelog }} >> $GITHUB_STEP_SUMMARY
-          fi
-
-          IMAGE=$(podman pull ${{ steps.rechunk.outputs.ref }})
-          sudo rm -rf ${{ steps.rechunk.outputs.location }}
-          podman image tag $IMAGE ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-          IMAGE=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          INSPECT=$(podman image inspect $IMAGE)
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
-          echo "digest=$(echo "$INSPECT" | jq -r '.[0].Digest')" >> $GITHUB_OUTPUT
-          echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
-          echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
-          echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
-          echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
-          echo $INSPECT | jq .
-
-      # Push the image to GHCR (Image Registry)
-      - name: Push to registry
-        id: push
-        env:
-          IMAGE_TAG: ${{ needs.generate_matrix.outputs.tag }}-${{ env.CLEAN_ARCH }}
-          IMAGE_REF: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_PATH }}/${{ env.IMAGE_NAME }}
-        run: |
-          set -x
-          lowercase_ref=$(echo "${{ env.IMAGE_REF }}" | tr '[:upper:]' '[:lower:]')
-          podman tag ${{ steps.load.outputs.image-id }} ${lowercase_ref}:${{ env.IMAGE_TAG }}
-          for i in {1..3}; do
-            podman push --digestfile=/tmp/digestfile ${lowercase_ref}:${{ env.IMAGE_TAG }} && break || sleep $((5 * i));
-          done
-          [ -f /tmp/digestfile ] || exit 1
-          REMOTE_IMAGE_DIGEST=$(cat /tmp/digestfile)
-          echo "digest=$REMOTE_IMAGE_DIGEST" >> $GITHUB_OUTPUT
-          echo "image-ref=${lowercase_ref}:${{ env.IMAGE_TAG }}" >> $GITHUB_OUTPUT
-          cat /tmp/digestfile
+          platform: ${{ matrix.platform }}
+          containerfile: ${{ inputs.containerfile }}
+          image-name: ${{ inputs.image-name }}
+          image-path: ${{ inputs.image-path }}
+          image-tag: ${{ needs.generate_matrix.outputs.tag }}
+          docs-url: ${{ inputs.docs-url }}
+          image-description: ${{ inputs.image-description }}
+          REGISTRY: ${{ inputs.REGISTRY }}
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
@@ -300,13 +223,13 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-        run: cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.push.outputs.image-ref }}@${{ steps.push.outputs.digest }}
+        run: cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.rechunker.outputs.image-ref }}@${{ steps.rechunker.outputs.digest }}
 
       - name: Add SBOM Attestation
         if: ${{ inputs.generate-sbom == true && env.SIGNING_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.merged == true) }}
         env:
-          IMAGE: ${{ steps.push.outputs.image-ref }}
-          DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE: ${{ steps.rechunker.outputs.image-ref }}
+          DIGEST: ${{ steps.rechunker.outputs.digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
@@ -316,31 +239,6 @@ jobs:
             --type spdxjson \
             --key env://COSIGN_PRIVATE_KEY \
             "${IMAGE}@${DIGEST}"
-
-      - name: Create Job Outputs
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          mkdir -p /tmp/outputs/digests/
-          jq -n --arg platform "${PLATFORM}" \
-            --arg digest "${{ steps.push.outputs.digest }}" \
-            --arg redhat_version_id "${{ steps.load.outputs.redhat-version-id }}" \
-            --arg version "${{ steps.load.outputs.version }}" \
-            --arg image_id "${{ steps.load.outputs.image-id }}" \
-            '{($platform): {digest: $digest, version: $version, redhat_version_id: $redhat_version_id, image_id: $image_id}}' \
-            > /tmp/outputs/digests/${IMAGE_NAME}_${{env.CLEAN_ARCH}}.json
-
-          cat /tmp/outputs/digests/${IMAGE_NAME}_${{env.CLEAN_ARCH}}.json
-
-      - name: Upload Output Artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ${{ env.IMAGE_NAME }}_${{ env.CLEAN_ARCH }}
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            /tmp/outputs/digests/*.json
 
   manifest:
     name: Create Manifest
