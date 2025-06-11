@@ -194,7 +194,7 @@ jobs:
         id: generate-sbom
         if: ${{ inputs.generate-sbom == true && (github.event_name != 'pull_request' || github.event.pull_request.merged == true) }}
         env:
-          IMAGE_ID: ${{ steps.build.outputs.image-id }}
+          IMAGE_ID: ${{ steps.build.outputs.image-ref }}@${{ steps.build.outputs.digest }}
           SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
         run: |
           sudo systemctl start podman.socket
