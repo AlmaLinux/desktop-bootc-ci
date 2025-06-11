@@ -118,7 +118,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       tag: ${{ steps.set-matrix.outputs.WORKING_TAG }}
     steps:
-      - uses: ./.github/actions/prepare-build
+      - uses: AlmaLinux/atomic-ci/.github/actions/prepare-build
         id: set-matrix
         with:
           platforms: ${{ inputs.platforms }}
@@ -149,7 +149,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: ./.github/actions/build
+      - uses: AlmaLinux/atomic-ci/.github/actions/build
         id: initial-build
         with:
           platforms: ${{ matrix.platform }}
