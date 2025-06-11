@@ -177,7 +177,7 @@ jobs:
           image-name: ${{ inputs.image-name }}
           image-path: ${{ inputs.image-path }}
           image-tag: ${{ needs.generate_matrix.outputs.tag }}
-          skip-maximize-build-space: ${{ inputs.skip-maximize-build-space }}
+          skip-maximize-build-space: ${{ inputs.skip-maximize-build-space == true }}
           docs-url: ${{ inputs.docs-url }}
           image-description: ${{ inputs.image-description }}
           previous-image: ${{ inputs.previous-image }}
