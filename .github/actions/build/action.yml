@@ -82,7 +82,7 @@ runs:
         echo ${{ inputs.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ inputs.REGISTRY }}
 
     - name: Maximize build space
-      if: ${{ inputs.platform != 'arm64' && inputs.skip-maximize-build-space != true }}
+      if: ${{ inputs.platform != 'arm64' && inputs.skip-maximize-build-space != 'true' }}
       uses: ublue-os/remove-unwanted-software@cc0becac701cf642c8f0a6613bbdaf5dc36b259e # v9
       with:
         remove-codeql: true
