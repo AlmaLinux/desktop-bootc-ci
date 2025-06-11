@@ -129,6 +129,7 @@ jobs:
           path: github-actions
 
       - uses: ./github-actions/.github/actions/prepare-build
+        name: Prepare build
         id: set-matrix
         with:
           platforms: ${{ inputs.platforms }}
@@ -167,9 +168,10 @@ jobs:
           path: github-actions
 
       - uses: ./github-actions/.github/actions/build
+        name: Initial Build
         id: initial-build
         with:
-          platforms: ${{ matrix.platform }}
+          platform: ${{ matrix.platform }}
           variant: ${{ inputs.variant }}
           containerfile: ${{ inputs.containerfile }}
           image_name: ${{ inputs.image-name }}
