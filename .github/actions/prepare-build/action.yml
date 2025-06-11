@@ -47,12 +47,6 @@ runs:
       if: ${{ inputs.upstream-public-key != '' }}
       uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
 
-    - name: Checkout
-      if: ${{ inputs.upstream-public-key != '' }}
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      with:
-        submodules: true
-
     - name: Extract upstream
       if: ${{ inputs.upstream-public-key != '' }}
       id: extract
