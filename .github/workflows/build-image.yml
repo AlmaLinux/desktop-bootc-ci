@@ -168,8 +168,8 @@ jobs:
           path: github-actions
 
       - uses: ./github-actions/.github/actions/build
-        name: Initial Build
-        id: initial-build
+        name: Build image
+        id: build
         with:
           platform: ${{ matrix.platform }}
           variant: ${{ inputs.variant }}
@@ -178,22 +178,12 @@ jobs:
           image-path: ${{ inputs.image-path }}
           image-tag: ${{ needs.generate_matrix.outputs.tag }}
           skip-maximize-build-space: ${{ inputs.skip-maximize-build-space }}
+          docs-url: ${{ inputs.docs-url }}
+          image-description: ${{ inputs.image-description }}
+          previous-image: ${{ inputs.previous-image }}
           REGISTRY: ${{ inputs.REGISTRY }}
           REGISTRY_USER: ${{ inputs.REGISTRY_USER }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-
-      - uses: ./github-actions/.github/actions/rechunker
-        name: Rechunk and push image
-        id: rechunker
-        with:
-          platform: ${{ matrix.platform }}
-          containerfile: ${{ inputs.containerfile }}
-          image-name: ${{ inputs.image-name }}
-          image-path: ${{ inputs.image-path }}
-          image-tag: ${{ needs.generate_matrix.outputs.tag }}
-          docs-url: ${{ inputs.docs-url }}
-          image-description: ${{ inputs.image-description }}
-          REGISTRY: ${{ inputs.REGISTRY }}
 
       - name: Setup Syft
         id: setup-syft
@@ -204,7 +194,7 @@ jobs:
         id: generate-sbom
         if: ${{ inputs.generate-sbom == true && (github.event_name != 'pull_request' || github.event.pull_request.merged == true) }}
         env:
-          IMAGE_ID: ${{ steps.rechunker.outputs.image-id }}
+          IMAGE_ID: ${{ steps.build.outputs.image-id }}
           SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
         run: |
           sudo systemctl start podman.socket
