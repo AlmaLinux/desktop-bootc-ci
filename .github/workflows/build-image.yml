@@ -166,7 +166,7 @@ jobs:
           ref: 'restructure'
           path: github-actions
 
-      - uses: ./github-actions/atomic-ci/.github/actions/build
+      - uses: ./github-actions/.github/actions/build
         id: initial-build
         with:
           platforms: ${{ matrix.platform }}
