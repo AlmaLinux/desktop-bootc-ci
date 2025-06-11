@@ -20,7 +20,7 @@ inputs:
   image-tag:
     description: The tag for the image
     required: true
-  skip_maximize_build_space:
+  skip-maximize-build-space:
     description: Whether to skip maximizing build space
     required: false
   REGISTRY:
