@@ -138,7 +138,7 @@ runs:
         ref: ${{ steps.build.outputs.image-id }}
         prev-ref: ${{ env.PREVIOUS_IMAGE }}
         skip_compression: true
-        version: ${{ steps.check.outputs.image-id }}
+        version: ${{ steps.check.outputs.version }}
         pretty: ${{ steps.check.outputs.redhat-version-id }}
         revision: ${{ github.sha }}
         labels: |

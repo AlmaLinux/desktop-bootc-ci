@@ -58,7 +58,7 @@ on:
         description: "Generate a Software Bill of Materials (SBOM) for the image"
         required: false
         type: boolean
-        default: false
+        default: true
       changelog-snippet:
         description: "Middle snippet of the changelog, to highlight major components"
         required: false
@@ -213,13 +213,13 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-        run: cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.rechunker.outputs.image-ref }}@${{ steps.rechunker.outputs.digest }}
+        run: cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.build.outputs.image-ref }}@${{ steps.build.outputs.digest }}
 
       - name: Add SBOM Attestation
         if: ${{ inputs.generate-sbom == true && env.SIGNING_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.merged == true) }}
         env:
-          IMAGE: ${{ steps.rechunker.outputs.image-ref }}
-          DIGEST: ${{ steps.rechunker.outputs.digest }}
+          IMAGE: ${{ steps.build.outputs.image-ref }}
+          DIGEST: ${{ steps.build.outputs.digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
