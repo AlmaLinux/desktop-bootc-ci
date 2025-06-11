@@ -118,55 +118,12 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       tag: ${{ steps.set-matrix.outputs.WORKING_TAG }}
     steps:
-      - name: Set matrix
+      - uses: ./.github/actions/prepare-build
         id: set-matrix
-        run: |
-          # turn the comma separated string into a list
-          platforms=()
-          IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
-
-          MATRIX="{\"include\":[]}"
-          for platform in "${platforms[@]}"; do
-            MATRIX=$(echo $MATRIX | jq ".include += [{\"platform\": \"$platform\"}]")
-          done
-          echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
-
-          WORKING_TAG="${{ github.ref_name }}"
-          echo "WORKING_TAG=${WORKING_TAG//\//_}" >> "$GITHUB_OUTPUT"
-
-      - name: Install Cosign
-        if: ${{ inputs.upstream-public-key != '' }}
-        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
-
-      - name: Checkout
-        if: ${{ inputs.upstream-public-key != '' }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          submodules: true
-
-      - name: Extract upstream
-        if: ${{ inputs.upstream-public-key != '' }}
-        id: extract
-        run: |
-          # Install Dockerfile parser
-          pip3 install dockerfile-parse
-          # Extract the last FROM image using Python
-          upstream=$(python3 - << 'EOF'
-          from dockerfile_parse import DockerfileParser
-          with open("${{ inputs.containerfile }}", "r") as f:
-              dfp = DockerfileParser(fileobj=f)
-              froms = [s['value'].split()[0] for s in dfp.structure if s['instruction'] == 'FROM']
-              print(froms[-1])
-          EOF
-          )
-          echo "upstream-image=$upstream" >> $GITHUB_OUTPUT
-
-      - name: Verify signature
-        if: ${{ inputs.upstream-public-key != '' }}
-        id: verify
-        run: |
-          echo "Verifying signature for ${{ steps.extract.outputs.upstream-image }}"
-          cosign verify --key ${{ inputs.upstream-public-key }} ${{ steps.extract.outputs.upstream-image }} | jq .
+          platforms: ${{ inputs.platforms }}
+          containerfile: ${{ inputs.containerfile }}
+          upstream-public-key: ${{ inputs.upstream-public-key }}
 
   build_push:
     name: Build and push image
@@ -189,68 +146,22 @@ jobs:
       version: ${{ steps.load.outputs.version }}
 
     steps:
-      - name: Set up environment
-        id: set-env
-        run: |
-          ARCH=${{ matrix.platform }}
-          echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
-
-      - name: Login to Container Registry
-        run: |
-          echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
-
-          # This is needed by cosign
-          echo ${{ secrets.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
-
-      - name: Maximize build space
-        if: ${{ matrix.platform != 'arm64' && inputs.skip-maximize-build-space != true }}
-        uses: ublue-os/remove-unwanted-software@cc0becac701cf642c8f0a6613bbdaf5dc36b259e # v9
-        with:
-          remove-codeql: true
-
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - uses: ./.github/actions/build
+        id: initial-build
         with:
-          submodules: true
-          fetch-depth: 500
-
-      - name: Build image
-        id: build
-        shell: bash
-        env:
-          IMAGE_TAG: ${{ needs.generate_matrix.outputs.tag }}-${{ env.CLEAN_ARCH }}
-          VARIANT: ${{ inputs.variant }}
-        run: |
-          sudo podman build \
-            --platform=linux/${{ matrix.platform }} \
-            --security-opt=label=disable \
-            --cap-add=all \
-            --device /dev/fuse \
-            --timestamp=0 \
-            --iidfile /tmp/image-id \
-            --build-arg IMAGE_NAME=${{ env.IMAGE_NAME }} \
-            --build-arg IMAGE_REGISTRY=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_PATH }} \
-            --build-arg VARIANT=${{ env.VARIANT }} \
-            -t ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            -f ${{ env.CONTAINERFILE }} \
-            .
-
-          echo "image-id=$(cat /tmp/image-id)" >> $GITHUB_OUTPUT
-          echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
-
-      - name: Check image
-        id: check
-        shell: bash
-        env:
-          IMAGE_ID: ${{ steps.build.outputs.image-id }}
-        run: |
-          INSPECT=$(sudo podman image inspect ${{ env.IMAGE_ID }} )
-          echo $INSPECT | jq .
-          echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
-          echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
-          echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
-
-          sudo podman run --platform=linux/${{ matrix.platform }} --rm ${{ env.IMAGE_ID }} bash -c "rpm -q almalinux-gpg-keys && cat /etc/os-release"
+          platforms: ${{ matrix.platform }}
+          variant: ${{ inputs.variant }}
+          containerfile: ${{ inputs.containerfile }}
+          image_name: ${{ inputs.image-name }}
+          image_path: ${{ inputs.image-path }}
+          image_tag: ${{ needs.generate_matrix.outputs.tag }}
+          skip_maximize_build_space: ${{ inputs.skip-maximize-build-space }}
+          REGISTRY: ${{ inputs.REGISTRY }}
+          REGISTRY_USER: ${{ inputs.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
 
       - name: Setup Syft
         id: setup-syft

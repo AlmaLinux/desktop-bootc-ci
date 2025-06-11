@@ -1,0 +1,110 @@
+---
+name: Initial Build Action
+
+inputs:
+  platform:
+    description: The platform to build the image for (e.g., "x86_64", "arm64")
+    required: true
+  variant:
+    description: The variant of the image to build
+    required: true
+  containerfile:
+    description: The path to the Containerfile used for building the image
+    required: true
+  image_name:
+    description: The name of the image to build
+    required: true
+  image_path:
+    description: The path where the image will be stored in the registry
+    required: true
+  image_tag:
+    description: The tag for the image
+    required: true
+  skip_maximize_build_space:
+    description: Whether to skip maximizing build space
+    required: false
+  REGISTRY:
+    description: The container registry URL (e.g., "registry.example.com")
+    required: true
+  REGISTRY_USER:
+    description: The username for the container registry login
+    required: true
+  REGISTRY_TOKEN:
+    description: The token for authenticating with the container registry
+    required: true
+
+outputs:
+  image-id:
+    description: The ID of the built image
+    value: ${{ steps.build.outputs.image-id }}
+  date:
+    description: The date when the image was built
+    value: ${{ steps.build.outputs.date }}
+  redhat-id:
+    description: The Red Hat ID from the image labels
+    value: ${{ steps.check.outputs.redhat-id }}
+  redhat-version-id:
+    description: The Red Hat version ID from the image labels
+    value: ${{ steps.check.outputs.redhat-version-id }}
+  version:
+    description: The version of the image
+    value: ${{ steps.check.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up environment
+      id: set-env
+      shell: bash
+      run: |
+        ARCH=${{ inputs.platform }}
+        echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
+
+    - name: Login to Container Registry
+      shell: bash
+      run: |
+        # Docker login, not podman, because Cosign uses the docker login file
+        echo ${{ inputs.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ inputs.REGISTRY }}
+
+    - name: Maximize build space
+      if: ${{ matrix.platform != 'arm64' && inputs.skip-maximize-build-space != true }}
+      uses: ublue-os/remove-unwanted-software@cc0becac701cf642c8f0a6613bbdaf5dc36b259e # v9
+      with:
+        remove-codeql: true
+
+    - name: Build image
+      id: build
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image_tag }}-${{ env.CLEAN_ARCH }}
+      run: |
+        sudo podman build \
+          --platform=linux/${{ inputs.platform }} \
+          --security-opt=label=disable \
+          --cap-add=all \
+          --device /dev/fuse \
+          --timestamp=0 \
+          --iidfile /tmp/image-id \
+          --build-arg IMAGE_NAME=${{ inputs.image_name }} \
+          --build-arg IMAGE_REGISTRY=${{ inputs.REGISTRY }}/${{ inputs.image_path }} \
+          --build-arg VARIANT=${{ inputs.variant }} \
+          -t ${{ inputs.image_name }}:${IMAGE_TAG} \
+          -f ${{ inputs.containerfile }} \
+          .
+
+        echo "image-id=$(cat /tmp/image-id)" >> $GITHUB_OUTPUT
+        echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
+
+    - name: Check image
+      id: check
+      shell: bash
+      env:
+        IMAGE_ID: ${{ steps.build.outputs.image-id }}
+      run: |
+        INSPECT=$(sudo podman image inspect ${{ env.IMAGE_ID }} )
+        echo $INSPECT | jq .
+        echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
+        echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
+        echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
+
+        sudo podman run --platform=linux/${{ inputs.platform }} --rm ${{ env.IMAGE_ID }} bash -c "rpm -q almalinux-gpg-keys && cat /etc/os-release"

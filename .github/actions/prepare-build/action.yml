@@ -1,0 +1,80 @@
+---
+name: Prepare Build
+description: |
+  This action prepares the build environment by setting up the matrix for platforms,
+  extracting the upstream image, and verifying its signature if provided.
+
+inputs:
+  platforms:
+    description: Comma-separated list of platforms to build for (e.g., "amd64,arm64")
+    required: true
+  containerfile:
+    description: Path to the Containerfile to use for extracting the upstream image
+    required: true
+  upstream-public-key:
+    description: Public key for verifying the upstream image signature (optional)
+    required: false
+
+outputs:
+  matrix:
+    description: The matrix of platforms to build for
+    value: ${{ steps.set-matrix.outputs.matrix }}
+  tag:
+    description: The working tag derived from the Git reference name
+    value: ${{ steps.set-matrix.outputs.WORKING_TAG }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set matrix
+      id: set-matrix
+      shell: bash
+      run: |
+        # turn the comma separated string into a list
+        platforms=()
+        IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
+
+        MATRIX="{\"include\":[]}"
+        for platform in "${platforms[@]}"; do
+          MATRIX=$(echo $MATRIX | jq ".include += [{\"platform\": \"$platform\"}]")
+        done
+        echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
+
+        WORKING_TAG="${{ github.ref_name }}"
+        echo "WORKING_TAG=${WORKING_TAG//\//_}" >> "$GITHUB_OUTPUT"
+
+    - name: Install Cosign
+      if: ${{ inputs.upstream-public-key != '' }}
+      uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+
+    - name: Checkout
+      if: ${{ inputs.upstream-public-key != '' }}
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      with:
+        submodules: true
+
+    - name: Extract upstream
+      if: ${{ inputs.upstream-public-key != '' }}
+      id: extract
+      shell: bash
+      run: |
+        # Install Dockerfile parser
+        pip3 install dockerfile-parse
+        # Extract the last FROM image using Python
+        upstream=$(python3 - << 'EOF'
+        from dockerfile_parse import DockerfileParser
+        with open("${{ inputs.containerfile }}", "r") as f:
+            dfp = DockerfileParser(fileobj=f)
+            froms = [s['value'].split()[0] for s in dfp.structure if s['instruction'] == 'FROM']
+            print(froms[-1])
+        EOF
+        )
+        echo "upstream-image=$upstream" >> $GITHUB_OUTPUT
+
+    - name: Verify signature
+      if: ${{ inputs.upstream-public-key != '' }}
+      id: verify
+      shell: bash
+      run: |
+        echo "Verifying signature for ${{ steps.extract.outputs.upstream-image }}"
+        cosign verify --key ${{ inputs.upstream-public-key }} ${{ steps.extract.outputs.upstream-image }} | jq .
