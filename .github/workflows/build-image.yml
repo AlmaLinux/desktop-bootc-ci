@@ -121,7 +121,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: AlmaLinux/atomic-ci/.github/workflows/prepare-build.yml
+      - uses: AlmaLinux/atomic-ci/.github/workflows/prepare-build.yml@restructure
         id: set-matrix
         with:
           platforms: ${{ inputs.platforms }}
