@@ -55,7 +55,7 @@ runs:
       id: set-env
       shell: bash
       run: |
-        ARCH=${{ input.platform }}
+        ARCH=${{ inputs.platform }}
         echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
 
     - name: Prepare ISO configuration
@@ -76,7 +76,7 @@ runs:
         type: iso
         use-librepo: ${{ inputs.use_librepo }}
         config-file: ${{ inputs.config-file }}
-        platform: linux/${{ input.platform }}
+        platform: linux/${{ inputs.platform }}
 
     - name: Rename ISO
       id: rename
