@@ -155,6 +155,7 @@ jobs:
         with:
           directory: ${{ steps.build-iso.outputs.output_directory }}
           bucket: ${{ inputs.bucket }}
+          path: ${{ inputs.image-name }}
           aws-default-region: ${{ inputs.aws-default-region }}
           iso-name: ${{ steps.build-iso.outputs.iso_name }}
           checksum-name: ${{ steps.build-iso.outputs.checksum_name }}
