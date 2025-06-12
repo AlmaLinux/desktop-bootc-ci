@@ -230,7 +230,7 @@ jobs:
         with:
           platforms: ${{ inputs.platforms }}
           image-name: ${{ inputs.image-name }}
-          image-ref: ${{ needs.build_push.outputs.image-ref }}
+          image-path: ${{ inputs.image-path }}
           image-tag: ${{ needs.generate_matrix.outputs.tag }}
           image-description: ${{ inputs.image-description }}
           docs-url: ${{ inputs.docs-url }}
