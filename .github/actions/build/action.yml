@@ -96,6 +96,7 @@ runs:
       env:
         IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
       run: |
+        echo "::group::Build Image"
         sudo podman build \
           --platform=linux/${{ inputs.platform }} \
           --security-opt=label=disable \
@@ -112,6 +113,7 @@ runs:
 
         echo "image-id=$(cat /tmp/image-id)" >> $GITHUB_OUTPUT
         echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
 
     - name: Check image
       id: check
@@ -119,6 +121,7 @@ runs:
       env:
         IMAGE_ID: ${{ steps.build.outputs.image-id }}
       run: |
+        echo "::group::Check Image"
         INSPECT=$(sudo podman image inspect ${{ env.IMAGE_ID }} )
         echo $INSPECT | jq .
         echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
@@ -126,6 +129,7 @@ runs:
         echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
 
         sudo podman run --platform=linux/${{ inputs.platform }} --rm ${{ env.IMAGE_ID }} bash -c "rpm -q almalinux-gpg-keys && cat /etc/os-release"
+        echo "::endgroup::"
 
     - name: Lowercase previous image
       id: lowercase
@@ -180,6 +184,7 @@ runs:
         IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
       shell: bash
       run: |
+        echo "::group::Load Image"
         ls -l ${{ steps.rechunk.outputs.changelog }}
         cat ${{ steps.rechunk.outputs.changelog }}
         if [ -s ${{ steps.rechunk.outputs.changelog }} ]; then
@@ -199,14 +204,16 @@ runs:
         echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
         echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
         echo $INSPECT | jq .
+        echo "::endgroup::"
 
     # Push the image to GHCR (Image Registry)
-    - name: Push to registry
+    - name: Push to Registry
       id: push
       env:
         IMAGE_TAG: ${{ inputs.image-tag }}-${{ env.CLEAN_ARCH }}
       shell: bash
       run: |
+        echo "::group::Push to Registry"
         podman tag ${{ steps.load.outputs.image-id }} ${{ steps.set-env.outputs.image-ref }}:${{ env.IMAGE_TAG }}
         for i in {1..3}; do
           podman push --digestfile=/tmp/digestfile ${{ steps.set-env.outputs.image-ref }}:${{ env.IMAGE_TAG }} && break || sleep $((5 * i));
@@ -215,10 +222,12 @@ runs:
         REMOTE_IMAGE_DIGEST=$(cat /tmp/digestfile)
         echo "digest=$REMOTE_IMAGE_DIGEST" >> $GITHUB_OUTPUT
         cat /tmp/digestfile
+        echo "::endgroup::"
 
     - name: Create Job Outputs
       shell: bash
       run: |
+        echo "::group::Create Job Outputs"
         mkdir -p /tmp/outputs/digests/
         jq -n --arg platform "${{ inputs.platform }}" \
           --arg digest "${{ steps.push.outputs.digest }}" \
@@ -229,6 +238,7 @@ runs:
           > /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json
 
         cat /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json
+        echo "::endgroup::"
 
     - name: Upload Output Artifacts
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
