@@ -347,16 +347,10 @@ jobs:
           echo "Pushed manifest to $lowercase_ref with digest $DIGEST"
           echo $INSPECT | jq .
 
-      - name: Install Cosign
+      - uses: ./github-actions/.github/actions/sign
+        name: Sign Manifest
+        id: sign
         if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.merged == true) && env.SIGNING_ENABLED == 'true' }}
-        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
-
-      - name: Sign Manifest
-        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.merged == true) && env.SIGNING_ENABLED == 'true' }}
-        env:
-          DIGEST: ${{ steps.push_manifest.outputs.digest }}
-          IMAGE: ${{ steps.push_manifest.outputs.image }}
-          COSIGN_EXPERIMENTAL: false
-          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-        run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY $IMAGE@$DIGEST
+        with:
+          image-ref: ${{ steps.push_manifest.outputs.image }}@${{ steps.push_manifest.outputs.digest }}
+          cosign-private-key: ${{ secrets.SIGNING_SECRET }}
