@@ -122,7 +122,6 @@ jobs:
         uses: ./github-actions/.github/actions/build-iso
         with:
           image: ${{ inputs.image }}
-          image-name: ${{ inputs.image-name }}
           update_origin_ref: ${{ inputs.update_origin_ref }}
           update_is_signed: ${{ inputs.update_is_signed }}
           config-file: ${{ inputs.config-file }}
