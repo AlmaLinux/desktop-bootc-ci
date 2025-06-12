@@ -75,7 +75,7 @@ runs:
         ARCH=${{ inputs.platform }}
         echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
 
-        lowercase_ref=$(echo "${{ inputs.REGISTRY }}/${{ inputs.image-path }}/${{ inputs.image-name }}:${{ env.IMAGE_TAG }}" | tr '[:upper:]' '[:lower:]')
+        lowercase_ref=$(echo "${{ inputs.REGISTRY }}/${{ inputs.image-path }}/${{ inputs.image-name }}" | tr '[:upper:]' '[:lower:]')
         echo "image-ref=${lowercase_ref}" >> $GITHUB_OUTPUT
 
     - name: Login to Container Registry
