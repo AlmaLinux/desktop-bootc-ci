@@ -198,7 +198,7 @@ jobs:
         if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.merged == true) && env.SIGNING_ENABLED == 'true' }}
         with:
           image-ref: ${{ steps.build.outputs.image-ref }}@${{ steps.build.outputs.digest }}
-          cosign-private-key: ${{ secrets.SIGNING_SECRET }}
+          signing-secret: ${{ secrets.SIGNING_SECRET }}
           sbom-path: ${{ steps.generate-sbom.outputs.sbom-path }}
 
 
@@ -218,6 +218,13 @@ jobs:
       image-id: ${{ steps.push_manifest.outputs.image-id }}
       signing-enabled: ${{ env.SIGNING_ENABLED }}
     steps:
+      - name: Checkout github actions
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: AlmaLinux/atomic-ci
+          ref: 'restructure'
+          path: github-actions
+
       - name: Login to Container Registry
         run: |
           echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ env.IMAGE_REGISTRY }}
@@ -353,4 +360,4 @@ jobs:
         if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.merged == true) && env.SIGNING_ENABLED == 'true' }}
         with:
           image-ref: ${{ steps.push_manifest.outputs.image }}@${{ steps.push_manifest.outputs.digest }}
-          cosign-private-key: ${{ secrets.SIGNING_SECRET }}
+          signing-secret: ${{ secrets.SIGNING_SECRET }}
