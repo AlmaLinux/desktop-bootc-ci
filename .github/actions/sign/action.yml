@@ -1,0 +1,40 @@
+---
+name: Sign image
+
+inputs:
+  signing-secret:
+    description: The secret used for signing the image
+    required: true
+  image-ref:
+    description: The reference to the image to sign
+    required: true
+  sbom-path:
+    description: The path to the SBOM file to sign
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+
+    - name: Sign Image
+      env:
+        COSIGN_EXPERIMENTAL: false
+        COSIGN_PRIVATE_KEY: ${{ inputs.signing-secret }}
+      shell: bash
+      run: cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-ref }}
+
+    - name: Add SBOM Attestation
+      if: ${{ inputs.sbom-path != '' }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ inputs.signing-secret }}
+        SBOM_OUTPUT: ${{ inputs.sbom-path }}
+      shell: bash
+      run: |
+        cd "$(dirname "$SBOM_OUTPUT")"
+        cosign attest -y \
+          --predicate ./sbom.json \
+          --type spdxjson \
+          --key env://COSIGN_PRIVATE_KEY \
+          ${{ inputs.image-ref }}
