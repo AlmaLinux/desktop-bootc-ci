@@ -213,7 +213,7 @@ jobs:
       packages: write
       id-token: write
     outputs:
-      image: ${{ steps.push_manifest.outputs.image }}
+      image: ${{ steps.push_manifest.outputs.image-ref }}
       digest: ${{ steps.push_manifest.outputs.digest }}
       image-id: ${{ steps.push_manifest.outputs.image-id }}
       signing-enabled: ${{ env.SIGNING_ENABLED }}
