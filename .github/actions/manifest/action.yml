@@ -1,0 +1,175 @@
+---
+name: Create Manifest
+
+inputs:
+  platforms:
+    description: Comma-separated list of platforms to build for (e.g., "x86_64,arm64")
+    required: true
+  image-name:
+    description: The name of the image to build
+    required: true
+  image-ref:
+    description: The full reference to the image in the registry
+    required: true
+  image-tag:
+    description: The tag for the image
+    required: true
+  image-description:
+    description: A description of the image
+    required: true
+  docs-url:
+    description: The URL to the documentation for the image
+    required: true
+  containerfile:
+    description: The path to the Containerfile used for building the image
+    required: true
+  REGISTRY:
+    description: The container registry URL (e.g., "registry.example.com")
+    required: true
+  REGISTRY_USER:
+    description: The username for the container registry login
+    required: true
+  REGISTRY_TOKEN:
+    description: The token for authenticating with the container registry
+    required: true
+
+outputs:
+  image-id:
+    description: The ID of the built image
+    value: ${{ steps.push_manifest.outputs.image-id }}
+  image-ref:
+    description: The reference to the pushed image in the registry
+    value: ${{ steps.push_manifest.outputs.image }}
+  digest:
+    description: The digest of the pushed image
+    value: ${{ steps.push_manifest.outputs.digest }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Login to Container Registry
+      shell: bash
+      run: |
+        # Docker login, not podman, because Cosign uses the docker login file
+        echo ${{ inputs.REGISTRY_TOKEN }} | docker login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ inputs.REGISTRY }}
+
+    - name: Get a newer podman (from debian testing)
+      shell: bash
+      run: |
+        echo 'deb [trusted=yes] https://ftp.debian.org/debian/ testing main' | sudo tee /etc/apt/sources.list.d/testing.list
+        sudo apt update
+        sudo apt install -y crun/testing podman/testing
+
+    - name: Fetch Build Outputs
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        pattern: ${{ inputs.image-name }}_*
+        merge-multiple: true
+        path: /tmp/artifacts
+
+    - name: Load Outputs
+      id: load-outputs
+      shell: bash
+      run: |
+        ls -lR /tmp/artifacts/
+        jq -sc add /tmp/artifacts/*.json > merged.json
+        echo "DIGESTS_JSON=$(cat merged.json)" >> $GITHUB_OUTPUT
+        jq '.' merged.json
+
+    - name: Sanity check
+      id: check
+      env:
+        DIGESTS_JSON: ${{ steps.load-outputs.outputs.DIGESTS_JSON }}
+      shell: bash
+      run: |
+        # Ensure we have the digests we expected
+        platforms=()
+        IFS=',' read -r -a platforms <<< "${{ inputs.platforms }}"
+
+        if [[ $(echo ${DIGESTS_JSON} | jq 'length') -ne ${#platforms[@]} ]]; then
+          echo "Expected ${#platforms[@]} digests, found $(echo ${DIGESTS_JSON} | jq 'length')"
+          exit 1
+        fi
+
+        echo "version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .version] | unique | .[0]')" >> $GITHUB_OUTPUT
+        echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat_version_id] | unique | .[0]')" >> $GITHUB_OUTPUT
+        echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
+
+    - name: Image Metadata
+      uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
+      id: metadata
+      with:
+        tags: |
+          type=raw,value=${{ inputs.image-tag }}
+          type=sha,enable=${{ github.event_name != 'pull_request' }}
+          type=ref,event=pr
+        labels: |
+          containers.bootc=1
+          redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
+          version=${{ steps.check.outputs.redhat-version-id }}
+          release=${{ steps.check.outputs.redhat-version-id }}
+          org.opencontainers.image.version=${{ steps.check.outputs.version }}
+          org.opencontainers.image.created=${{ steps.check.outputs.date }}
+          org.opencontainers.image.description=${{ inputs.image-description }}
+          org.opencontainers.image.documentation=${{ inputs.docs-url }}
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/main/${{ inputs.containerfile }}
+          org.opencontainers.image.title=${{ inputs.image-name }}
+          org.opencontainers.image.url=${{ github.event.repository.html_url }}
+          org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+    - name: Create Manifest
+      id: create-manifest
+      env:
+        IMAGE_REF: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_PATH }}/${{ inputs.image-name }}
+      shell: bash
+      run: |
+        podman manifest create ${{ inputs.image-ref }}
+        echo "MANIFEST=${{ inputs.image-ref }}" >> $GITHUB_OUTPUT
+
+    - name: Populate Manifest
+      env:
+        MANIFEST: ${{ steps.create-manifest.outputs.MANIFEST }}
+        DIGESTS_JSON: ${{ steps.load-outputs.outputs.DIGESTS_JSON }}
+        LABELS: ${{ steps.metadata.outputs.labels }}
+      shell: bash
+      run: |
+        for platform in $(echo $DIGESTS_JSON | jq -r '. | to_entries | .[].key'); do
+          digest=$(echo $DIGESTS_JSON | jq -r ".[\"$platform\"].digest")
+          echo "Adding ${{ inputs.image-ref }}@$digest for $platform"
+          if [[ "$platform" = */v* ]]; then
+            podman manifest add $MANIFEST ${{ inputs.image-ref }}@$digest --arch ${platform%/*} --variant ${platform#*/}
+          else
+            podman manifest add $MANIFEST ${{ inputs.image-ref }}@$digest --arch $platform
+          fi
+        done
+
+        # Apply the labels to the manifest (separated by newlines)
+        while IFS= read -r label; do
+          echo "Applying label $label to manifest"
+          podman manifest annotate --index --annotation "$label" $MANIFEST
+        done <<< "$LABELS"
+
+    - name: Push Manifest
+      id: push_manifest
+      env:
+        MANIFEST: ${{ steps.create-manifest.outputs.MANIFEST }}
+        TAGS: ${{ steps.metadata.outputs.tags }}
+      shell: bash
+      run: |
+        while IFS= read -r tag; do
+          for i in {1..3}; do
+            podman manifest push --all=false --digestfile=/tmp/digestfile $MANIFEST ${{ inputs.image-ref }}:$tag && break || sleep $((5 * i));
+          done
+          [ -f /tmp/digestfile ] || exit 1
+          echo "Pushed manifest with tag $tag"
+        done <<< "$TAGS"
+
+        DIGEST=$(cat /tmp/digestfile)
+        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+        echo "image=${{ inputs.image-ref }}" >> $GITHUB_OUTPUT
+
+        INSPECT=$(podman manifest inspect ${{ inputs.image-ref }})
+        echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
+
+        echo "Pushed manifest to ${{ inputs.image-ref }} with digest $DIGEST"
+        echo $INSPECT | jq .
