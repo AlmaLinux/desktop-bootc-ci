@@ -1,5 +1,5 @@
 ---
-name: Initial Build Action
+name: Image Build Action
 
 inputs:
   platform:
