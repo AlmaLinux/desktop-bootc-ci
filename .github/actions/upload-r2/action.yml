@@ -1,0 +1,33 @@
+---
+name: Upload to Cloudflare R2
+
+inputs:
+  directory:
+    description: "The directory containing the files to upload"
+    required: true
+  bucket:
+    description: "The Cloudflare R2 bucket to upload the files to"
+    required: true
+  R2_ACCOUNT_ID:
+    description: "The Cloudflare R2 account ID"
+    required: true
+  R2_ACCESS_KEY_ID:
+    description: "The Cloudflare R2 access key ID"
+    required: true
+  R2_SECRET_ACCESS_KEY:
+    description: "The Cloudflare R2 secret access key"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload to Cloudflare
+      id: upload-cf
+      uses: ryand56/r2-upload-action@b801a390acbdeb034c5e684ff5e1361c06639e7c # v1.4
+      with:
+        r2-account-id: ${{ inputs.R2_ACCOUNT_ID }}
+        r2-access-key-id: ${{ inputs.R2_ACCESS_KEY_ID }}
+        r2-secret-access-key: ${{ inputs.R2_SECRET_ACCESS_KEY }}
+        r2-bucket: ${{ inputs.bucket }}
+        source-dir: ${{ inputs.directory }}
+        destination-dir: ./

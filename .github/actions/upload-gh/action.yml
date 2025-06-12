@@ -1,0 +1,30 @@
+---
+name: Upload to GitHub Actions Artifacts
+
+inputs:
+  artifact_name:
+    description: "The name of the artifact to upload"
+    required: true
+  directory:
+    description: "The directory containing the files to upload"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload ISOs and Checksum to Job Artifacts
+      id: upload-gh
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: ${{ inputs.directory }}
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: true
+        retention-days: 7
+
+    - name: Summary
+      shell: bash
+      run: |
+        echo "Artifact URL: ${{ steps.upload-gh.outputs.artifact-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "Digest: ${{ steps.upload-gh.outputs.artifact-digest }}" >> $GITHUB_STEP_SUMMARY

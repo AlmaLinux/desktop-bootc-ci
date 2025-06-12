@@ -1,0 +1,59 @@
+---
+name: Upload to Amazon S3
+
+inputs:
+  directory:
+    description: "The directory containing the files to upload"
+    required: true
+  bucket:
+    description: "The Cloudflare R2 bucket to upload the files to"
+    required: true
+  path:
+    description: "The path to the files to upload, relative to the directory"
+    required: true
+  iso-name:
+    description: "The name of the ISO file to upload"
+    required: true
+  checksum-name:
+    description: "The name of the checksum file to upload"
+    required: true
+  aws-default-region:
+    description: "The AWS region to use for S3 uploads"
+    required: true
+  S3_ACCESS_KEY_ID:
+    description: "The S3 access key ID"
+    required: true
+  S3_SECRET_ACCESS_KEY:
+    description: "The S3 secret access key"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload to S3
+      id: upload-s3
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.S3_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.S3_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: ${{ inputs.aws-default-region }}
+        BUCKET: ${{ inputs.bucket }}
+      shell: bash
+      run: |-
+        # Upload the files to S3 bucket
+        aws s3 cp ${{ inputs.directory }} \
+            s3://${BUCKET}/${{ inputs.path }}/ \
+            --recursive
+
+          # Make them uploaded file publicly available
+        aws s3api put-object-tagging \
+            --bucket ${BUCKET} \
+            --key ${{ inputs.path }}/${{ inputs.iso-name }} \
+            --tagging 'TagSet={Key=public,Value=yes}'
+
+        aws s3api put-object-tagging \
+            --bucket ${BUCKET} \
+            --key ${{ inputs.path }}/${{ inputs.checksum-name }} \
+            --tagging 'TagSet={Key=public,Value=yes}'
+
+        echo "ISO: https://${BUCKET}.s3-accelerate.dualstack.amazonaws.com/${{ inputs.path }}/${{ inputs.iso-name }}" >> $GITHUB_STEP_SUMMARY
+        echo "Digest: https://${BUCKET}.s3-accelerate.dualstack.amazonaws.com/${{ inputs.path }}/${{ inputs.checksum-name }}" >> $GITHUB_STEP_SUMMARY
