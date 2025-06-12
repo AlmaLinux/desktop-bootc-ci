@@ -58,7 +58,7 @@ on:
         description: "Generate a Software Bill of Materials (SBOM) for the image"
         required: false
         type: boolean
-        default: true
+        default: false
       changelog-snippet:
         description: "Middle snippet of the changelog, to highlight major components"
         required: false
