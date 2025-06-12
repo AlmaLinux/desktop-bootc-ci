@@ -226,6 +226,7 @@ jobs:
           path: github-actions
 
       - uses: ./github-actions/.github/actions/manifest
+        id: push_manifest
         name: Create Manifest
         with:
           platforms: ${{ inputs.platforms }}
@@ -244,5 +245,5 @@ jobs:
         id: sign
         if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.merged == true) && env.SIGNING_ENABLED == 'true' }}
         with:
-          image-ref: ${{ steps.push_manifest.outputs.image }}@${{ steps.push_manifest.outputs.digest }}
+          image-ref: ${{ steps.push_manifest.outputs.image-ref }}@${{ steps.push_manifest.outputs.digest }}
           signing-secret: ${{ secrets.SIGNING_SECRET }}
