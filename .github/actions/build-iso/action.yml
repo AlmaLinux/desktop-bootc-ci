@@ -1,0 +1,102 @@
+---
+name: Build ISO
+
+inputs:
+  platform:
+    description: The platform to build the image for (e.g., "x86_64", "arm64")
+    required: true
+  image:
+    description: Full podman image reference, including hash (e.g., "registry.example.com/image@sha256")
+    required: true
+  update_is_signed:
+    description: Whether the image is signed or not
+    required: false
+  update_origin_ref:
+    description: Image reference to update from (e.g., "{image}:latest")
+    required: true
+  config-file:
+    description: Path to the ISO configuration file
+    required: true
+  use_librepo:
+    description: "Use librepo to download the image"
+    required: false
+  REGISTRY:
+    description: The container registry URL (e.g., "registry.example.com")
+    required: true
+  REGISTRY_USER:
+    description: The username for the container registry login
+    required: true
+  REGISTRY_TOKEN:
+    description: The token for authenticating with the container registry
+    required: true
+
+outputs:
+  output_directory:
+    description: The directory where the built ISO and checksum are stored
+    value: ${{ steps.rename.outputs.output_directory }}
+  artifact_name:
+    description: The name of the artifact (ISO file) without the extension
+    value: ${{ steps.rename.outputs.ARTIFACT_NAME }}
+  iso_name:
+    description: The name of the built ISO file
+    value: ${{ steps.rename.outputs.ISO_NAME }}
+  checksum_name:
+    description: The name of the checksum file for the ISO
+    value: ${{ steps.rename.outputs.CHECKSUM_NAME }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Login to Container Registry
+      shell: bash
+      run: echo ${{ inputs.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ inputs.REGISTRY }}
+
+    - name: Set up environment
+      id: set-env
+      shell: bash
+      run: |
+        ARCH=${{ input.platform }}
+        echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
+
+    - name: Prepare ISO configuration
+      shell: bash
+      run: |
+        [ "${{ inputs.update_is_signed }}" = "true" ] && SIG="--enforce-container-sigpolicy"
+
+        sed -i 's#<UPDATE_IMAGE_REF>#${{ inputs.update_origin_ref }}#g' ${{ inputs.config-file }}
+        sed -i "s#<IMAGE_SIGNED>#${SIG}#g" ${{ inputs.config-file }}
+        cat ${{ inputs.config-file }}
+
+    - name: Build ISO
+      id: build
+      #uses: ublue-os/bootc-image-builder-action@b98784c42327746e107a6a753b64f44823bdbf2f
+      uses: alexiri/bootc-image-builder-action@platform
+      with:
+        image: ${{ inputs.image }}
+        type: iso
+        use-librepo: ${{ inputs.use_librepo }}
+        config-file: ${{ inputs.config-file }}
+        platform: linux/${{ input.platform }}
+
+    - name: Rename ISO
+      id: rename
+      env:
+        IMAGE_NAME: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live.iso
+        OUTPUT_PATH: output-${{ env.CLEAN_ARCH }}
+      shell: bash
+      run: |
+        set -x
+        mkdir -p ${{ env.OUTPUT_PATH }}
+        OUTPUT_DIRECTORY="$(realpath ${{ env.OUTPUT_PATH }})"
+
+        ARTIFACT_NAME="${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}"
+        ISO_NAME="${ARTIFACT_NAME}.iso"
+        CHECKSUM_NAME="${ISO_NAME}-CHECKSUM"
+
+        mv ${{ steps.build.outputs.output-path }} "${OUTPUT_DIRECTORY}/${ISO_NAME}"
+        mv ${{ steps.build.outputs.checksum-path }} "${OUTPUT_DIRECTORY}/${CHECKSUM_NAME}"
+
+        echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
+        echo "ISO_NAME=${ISO_NAME}" >> "${GITHUB_OUTPUT}"
+        echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
+        echo "CHECKSUM_NAME=${CHECKSUM_NAME}" >> "${GITHUB_OUTPUT}"

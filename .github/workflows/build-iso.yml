@@ -109,61 +109,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Checkout github actions
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          submodules: true
-
-      - name: Login to Container Registry
-        run: |
-          echo ${{ secrets.REGISTRY_TOKEN }} | podman login -u ${{ inputs.REGISTRY_USER }} --password-stdin ${{ inputs.REGISTRY }}
-
-      - name: Set up environment
-        id: set-env
-        run: |
-          ARCH=${{ matrix.platform }}
-          echo "CLEAN_ARCH=${ARCH//\//_}" >> "$GITHUB_ENV"
-
-      - name: Prepare ISO configuration
-        shell: bash
-        run: |
-          [ "${{ inputs.update_is_signed }}" = "true" ] && SIG="--enforce-container-sigpolicy"
-
-          sed -i 's#<UPDATE_IMAGE_REF>#${{ inputs.update_origin_ref }}#g' ${{ inputs.config-file }}
-          sed -i "s#<IMAGE_SIGNED>#${SIG}#g" ${{ inputs.config-file }}
-          cat ${{ inputs.config-file }}
+          repository: AlmaLinux/atomic-ci
+          ref: 'restructure'
+          path: github-actions
 
       - name: Build ISO
-        id: build
-        #uses: ublue-os/bootc-image-builder-action@b98784c42327746e107a6a753b64f44823bdbf2f
-        uses: alexiri/bootc-image-builder-action@platform
+        id: build-iso
+        uses: ./github-actions/.github/actions/build-iso
         with:
           image: ${{ inputs.image }}
-          type: iso
-          use-librepo: ${{ inputs.use_librepo }}
+          image-name: ${{ inputs.image-name }}
+          update_origin_ref: ${{ inputs.update_origin_ref }}
+          update_is_signed: ${{ inputs.update_is_signed }}
           config-file: ${{ inputs.config-file }}
-          platform: linux/${{ matrix.platform }}
-
-      - name: Rename ISO
-        id: rename
-        env:
-          IMAGE_NAME: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live.iso
-          OUTPUT_PATH: output-${{ env.CLEAN_ARCH }}
-        run: |
-          set -x
-          mkdir -p ${{ env.OUTPUT_PATH }}
-          OUTPUT_DIRECTORY="$(realpath ${{ env.OUTPUT_PATH }})"
-
-          mv ${{ steps.build.outputs.output-path }} "${OUTPUT_DIRECTORY}/${IMAGE_NAME}"
-          mv ${{ steps.build.outputs.checksum-path }} "${OUTPUT_DIRECTORY}/${IMAGE_NAME}-CHECKSUM"
-
-          echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
+          platform: ${{ matrix.platform }}
+          use_librepo: ${{ inputs.use_librepo }}
+          REGISTRY: ${{ inputs.REGISTRY }}
+          REGISTRY_USER: ${{ inputs.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
 
       - name: Upload ISOs and Checksum to Job Artifacts
         if: inputs.upload-to-github == true
         id: upload-gh
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ inputs.image-name }}-${{ env.CLEAN_ARCH }}-live
-          path: ${{ steps.rename.outputs.output_directory }}
+          name: ${{ steps.build-iso.outputs.artifact_name }}
+          path: ${{ steps.build-iso.outputs.output_directory }}
           if-no-files-found: error
           compression-level: 0
           overwrite: true
@@ -184,7 +159,7 @@ jobs:
           r2-access-key-id: ${{ secrets.ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
           r2-bucket: ${{ inputs.bucket }}
-          source-dir: ${{ steps.rename.outputs.output_directory }}
+          source-dir: ${{ steps.build-iso.outputs.output_directory }}
           destination-dir: ./
 
       - name: Upload to S3
@@ -198,7 +173,7 @@ jobs:
           BUCKET: ${{ inputs.bucket }}
         run: |-
           # Upload the files to S3 bucket
-          aws s3 cp ${{ steps.rename.outputs.output_directory }} \
+          aws s3 cp ${{ steps.build-iso.outputs.output_directory }} \
               s3://${BUCKET}/${{ inputs.image-name }}/ \
               --recursive
 
