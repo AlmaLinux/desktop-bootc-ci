@@ -74,10 +74,13 @@ on:
         description: "Cloudflare R2 account ID"
         required: false
       ACCESS_KEY_ID:
-        description: "S3/R2 access key ID"
+        description: "Cloudflare R2 access key ID"
         required: false
       SECRET_ACCESS_KEY:
-        description: "S3/R2 secret access key"
+        description: "Cloudflare R2 secret access key"
+        required: false
+      AWS_ROLE_ARN:
+        description: "The AWS role ARN to assume for AWS S3 uploads"
         required: false
 
 jobs:
@@ -105,6 +108,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{fromJson(needs.generate_matrix.outputs.matrix)}}
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -114,7 +121,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: AlmaLinux/atomic-ci
-          ref: 'main'
+          ref: 'aws_sign'
           path: github-actions
 
       - name: Build ISO
@@ -158,5 +165,4 @@ jobs:
           aws-default-region: ${{ inputs.aws-default-region }}
           iso-name: ${{ steps.build-iso.outputs.iso_name }}
           checksum-name: ${{ steps.build-iso.outputs.checksum_name }}
-          S3_ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.SECRET_ACCESS_KEY }}
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}

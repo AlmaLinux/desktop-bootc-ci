@@ -104,7 +104,7 @@ on:
         description: "The private key used to sign the image"
         required: false
       AWS_ROLE_ARN:
-        description: "The AWS role ARN to assume for signing the image"
+        description: "The AWS role ARN to assume for S3 uploads"
         required: false
 
 env:

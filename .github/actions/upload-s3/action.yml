@@ -20,22 +20,26 @@ inputs:
   aws-default-region:
     description: "The AWS region to use for S3 uploads"
     required: true
-  S3_ACCESS_KEY_ID:
-    description: "The S3 access key ID"
-    required: true
-  S3_SECRET_ACCESS_KEY:
-    description: "The S3 secret access key"
-    required: true
+  AWS_ROLE_ARN:
+    description: "The AWS role ARN to assume for S3 uploads"
+    required: false
 
 runs:
   using: "composite"
   steps:
+    - name: Configure AWS credentials
+      if: ${{ inputs.AWS_ROLE_ARN != '' && inputs.aws-default-region != '' }}
+      id: configure-aws
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+        role-session-name: almalinux-bootc-s3-${{ github.run_id }}
+        aws-region: ${{ inputs.aws-default-region }}
+        role-duration-seconds: 900  # 15 minutes, the minimum
+
     - name: Upload to S3
       id: upload-s3
       env:
-        AWS_ACCESS_KEY_ID: ${{ inputs.S3_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ inputs.S3_SECRET_ACCESS_KEY }}
-        AWS_DEFAULT_REGION: ${{ inputs.aws-default-region }}
         BUCKET: ${{ inputs.bucket }}
       shell: bash
       run: |-
