@@ -34,9 +34,6 @@ inputs:
     required: true
 
 outputs:
-  image-id:
-    description: The ID of the built image
-    value: ${{ steps.push_manifest.outputs.image-id }}
   image-ref:
     description: The reference to the pushed image in the registry
     value: ${{ steps.push_manifest.outputs.image }}
@@ -178,8 +175,5 @@ runs:
         echo "digest=$DIGEST" >> $GITHUB_OUTPUT
         echo "image=$MANIFEST" >> $GITHUB_OUTPUT
 
-        INSPECT=$(podman manifest inspect $MANIFEST)
-        echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
-
         echo "Pushed manifest to $MANIFEST with digest $DIGEST"
-        echo $INSPECT | jq .
+        podman manifest inspect $MANIFEST | jq .

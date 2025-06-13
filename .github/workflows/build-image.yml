@@ -79,9 +79,6 @@ on:
       digest:
         description: "The digest of the built image"
         value: ${{ jobs.manifest.outputs.digest }}
-      image-id:
-        description: "The image ID of the built image"
-        value: ${{ jobs.manifest.outputs.image-id }}
       version:
         description: "The version of the built image"
         value: ${{ jobs.manifest.outputs.version }}
