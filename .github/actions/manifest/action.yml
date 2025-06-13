@@ -43,6 +43,15 @@ outputs:
   digest:
     description: The digest of the pushed image
     value: ${{ steps.push_manifest.outputs.digest }}
+  version:
+    description: The version of the image based on the digests
+    value: ${{ steps.check.outputs.version }}
+  redhat-version-id:
+    description: The Red Hat version ID from the image metadata
+    value: ${{ steps.check.outputs.redhat-version-id }}
+  major-version:
+    description: The major version of the image
+    value: ${{ steps.check.outputs.major-version }}
 
 runs:
   using: "composite"
@@ -93,6 +102,7 @@ runs:
 
         echo "version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .version] | unique | .[0]')" >> $GITHUB_OUTPUT
         echo "redhat-version-id=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .redhat_version_id] | unique | .[0]')" >> $GITHUB_OUTPUT
+        echo "major-version=$(echo ${DIGESTS_JSON} | jq -r '[.[] | .major_version] | unique | .[0]')" >> $GITHUB_OUTPUT
         echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
 
     - name: Image Metadata
@@ -106,6 +116,7 @@ runs:
         labels: |
           containers.bootc=1
           redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
+          redhat.major-version=${{ steps.check.outputs.major-version }}
           version=${{ steps.check.outputs.redhat-version-id }}
           release=${{ steps.check.outputs.redhat-version-id }}
           org.opencontainers.image.version=${{ steps.check.outputs.version }}

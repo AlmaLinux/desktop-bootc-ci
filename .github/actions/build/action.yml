@@ -61,6 +61,9 @@ outputs:
   redhat-version-id:
     description: The Red Hat version ID from the image labels
     value: ${{ steps.load.outputs.redhat-version-id }}
+  major-version:
+    description: The major version extracted from the Red Hat version ID
+    value: ${{ steps.load.outputs.redhat-major-version }}
   version:
     description: The version of the image
     value: ${{ steps.load.outputs.version }}
@@ -126,6 +129,7 @@ runs:
         echo $INSPECT | jq .
         echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
         echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
+        echo "major-version=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]' | cut -d. -f1)" >> $GITHUB_OUTPUT
         echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
 
         sudo podman run --platform=linux/${{ inputs.platform }} --rm ${{ env.IMAGE_ID }} bash -c "rpm -q almalinux-gpg-keys && cat /etc/os-release"
@@ -151,6 +155,7 @@ runs:
         labels: |
           redhat.id=${{ steps.check.outputs.redhat-id }}
           redhat.version-id=${{ steps.check.outputs.redhat-version-id }}
+          redhat.major-version=${{ steps.check.outputs.major-version }}
           org.opencontainers.image.created=${{ steps.build.outputs.date }}
           org.opencontainers.image.description=${{ inputs.image-description }}
           org.opencontainers.image.documentation=${{ inputs.docs-url }}
@@ -202,6 +207,7 @@ runs:
         echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
         echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
         echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
+        echo "redhat-major-version=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.major-version"]'" >> $GITHUB_OUTPUT
         echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
         echo $INSPECT | jq .
         echo "::endgroup::"
@@ -234,7 +240,8 @@ runs:
           --arg redhat_version_id "${{ steps.load.outputs.redhat-version-id }}" \
           --arg version "${{ steps.load.outputs.version }}" \
           --arg image_id "${{ steps.load.outputs.image-id }}" \
-          '{($platform): {digest: $digest, version: $version, redhat_version_id: $redhat_version_id, image_id: $image_id}}' \
+          --arg major_version "${{ steps.load.outputs.redhat-major-version }}" \
+          '{($platform): {digest: $digest, version: $version, redhat_version_id: $redhat_version_id, image_id: $image_id, major_version: $major_version}}' \
           > /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json
 
         cat /tmp/outputs/digests/${{ inputs.image-name }}_${{ env.CLEAN_ARCH }}.json

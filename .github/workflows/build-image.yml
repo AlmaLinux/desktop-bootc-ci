@@ -84,13 +84,13 @@ on:
         value: ${{ jobs.manifest.outputs.image-id }}
       version:
         description: "The version of the built image"
-        value: ${{ jobs.build_push.outputs.version }}
-      redhat-id:
-        description: "The redhat.id label of the built image"
-        value: ${{ jobs.build_push.outputs.redhat-id }}
+        value: ${{ jobs.manifest.outputs.version }}
       redhat-version-id:
         description: "The redhat.version-id label of the built image"
-        value: ${{ jobs.build_push.outputs.redhat-version-id }}
+        value: ${{ jobs.manifest.outputs.redhat-version-id }}
+      major-version:
+        description: "The major version of the built image"
+        value: ${{ jobs.manifest.outputs.major-version }}
     secrets:
       REGISTRY_TOKEN:
         description: "The token to use for the registry"
