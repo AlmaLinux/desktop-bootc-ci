@@ -72,6 +72,14 @@ on:
         description: "The variant of the image to build"
         required: false
         type: string
+      KMS_KEY_ID:
+        description: "The KMS key ID to use for signing the image"
+        required: false
+        type: string
+      AWS_REGION:
+        description: "The AWS region to use for signing the image"
+        required: false
+        type: string
     outputs:
       image-ref:
         description: "The image reference of the built image"
@@ -95,13 +103,16 @@ on:
       SIGNING_SECRET:
         description: "The private key used to sign the image"
         required: false
+      AWS_ROLE_ARN:
+        description: "The AWS role ARN to assume for signing the image"
+        required: false
 
 env:
   IMAGE_NAME: ${{ inputs.image-name }}
   CONTAINERFILE: ${{ inputs.containerfile }}
   IMAGE_REGISTRY: ${{ inputs.REGISTRY }}
   IMAGE_PATH: ${{ inputs.image-path }}
-  SIGNING_ENABLED: ${{ secrets.SIGNING_SECRET != '' }}
+  SIGNING_ENABLED: ${{ (secrets.SIGNING_SECRET != null && secrets.SIGNING_SECRET != '') || inputs.KMS_KEY_ID != '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.image-name }}
@@ -122,7 +133,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: AlmaLinux/atomic-ci
-          ref: 'main'
+          ref: 'aws_sign'
           path: github-actions
 
       - uses: ./github-actions/.github/actions/prepare-build
@@ -161,7 +172,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: AlmaLinux/atomic-ci
-          ref: 'main'
+          ref: 'aws_sign'
           path: github-actions
 
       - uses: ./github-actions/.github/actions/build
@@ -197,6 +208,9 @@ jobs:
           image-ref: ${{ steps.build.outputs.image-ref }}@${{ steps.build.outputs.digest }}
           signing-secret: ${{ secrets.SIGNING_SECRET }}
           sbom-path: ${{ steps.generate-sbom.outputs.sbom-path }}
+          KMS_KEY_ID: ${{ inputs.KMS_KEY_ID }}
+          AWS_REGION: ${{ inputs.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
 
   manifest:
@@ -219,7 +233,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: AlmaLinux/atomic-ci
-          ref: 'main'
+          ref: 'aws_sign'
           path: github-actions
 
       - uses: ./github-actions/.github/actions/manifest
@@ -244,3 +258,6 @@ jobs:
         with:
           image-ref: ${{ steps.push_manifest.outputs.image-ref }}@${{ steps.push_manifest.outputs.digest }}
           signing-secret: ${{ secrets.SIGNING_SECRET }}
+          KMS_KEY_ID: ${{ inputs.KMS_KEY_ID }}
+          AWS_REGION: ${{ inputs.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
