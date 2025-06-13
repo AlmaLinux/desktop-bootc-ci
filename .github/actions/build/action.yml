@@ -207,7 +207,7 @@ runs:
         echo "image-id=$(echo "$INSPECT" | jq -r '("sha256:" + .[0].Id)')" >> $GITHUB_OUTPUT
         echo "redhat-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.id"]')" >> $GITHUB_OUTPUT
         echo "redhat-version-id=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.version-id"]')" >> $GITHUB_OUTPUT
-        echo "redhat-major-version=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.major-version"]'" >> $GITHUB_OUTPUT
+        echo "redhat-major-version=$(echo "$INSPECT" | jq -r '.[0].Labels["redhat.major-version"]')" >> $GITHUB_OUTPUT
         echo "version=$(echo "$INSPECT" | jq -r '.[0].Labels["org.opencontainers.image.version"]')" >> $GITHUB_OUTPUT
         echo $INSPECT | jq .
         echo "::endgroup::"
